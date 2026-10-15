@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS System Core</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap');
+        
+        :root {
+            --cyan: #00f3ff;
+            --blue: #0077ff;
+            --red: #ff003c;
+            --bg: #03080e;
+            --panel-bg: rgba(0, 18, 35, 0.45);
+            --text-glow: 0 0 6px var(--cyan), 0 0 12px var(--cyan);
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100vw; height: 100vh;
+            background-color: var(--bg); color: var(--cyan);
+            font-family: 'Share Tech Mono', monospace;
+            overflow: hidden; cursor: none; user-select: none;
+        }
+
+        /* CUSTOM GLOWING SCI-FI CURSOR */
+        #cursor-dot {
+            position: fixed; width: 4px; height: 4px; background: var(--cyan);
+            border-radius: 50%; pointer-events: none; z-index: 10000;
+            box-shadow: 0 0 10px var(--cyan); transform: translate(-50%, -50%);
+        }
+        #cursor-ring {
+            position: fixed; width: 32px; height: 32px; border: 1px solid var(--cyan);
+            border-radius: 50%; pointer-events: none; z-index: 9999;
+            box-shadow: inset 0 0 6px var(--cyan); transform: translate(-50%, -50%);
+            transition: width 0.15s, height 0.15s, border-color 0.15s;
+        }
+
+        /* CRT SCANLINES & OVERLAY */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(0, 243, 255, 0.03) 50%, rgba(0, 0, 0, 0.15) 50%),
+                        radial-gradient(circle, transparent 55%, rgba(0, 0, 0, 0.85) 100%);
+            background-size: 100% 4px, 100% 100%; pointer-events: none; z-index: 100;
+        }
+
+        /* STARTUP ANIMATION SCREEN */
+        #boot-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000; z-index: 5000; display: flex; flex-direction: column;
+            justify-content: center; padding: 8vw; font-size: 1.4rem;
+            color: var(--cyan); text-shadow: var(--text-glow);
+        }
+        .boot-bar-container {
+            width: 100%; max-width: 650px; height: 18px; border: 2px solid var(--cyan);
+            margin: 20px 0; padding: 2px; box-shadow: 0 0 10px rgba(0,243,255,0.3);
+        }
+        .boot-bar {
+            height: 100%; width: 0%; background: var(--cyan);
+            box-shadow: 0 0 15px var(--cyan); transition: width 0.08s linear;
+        }
+        .boot-line { margin: 6px 0; opacity: 0; font-family: 'Share Tech Mono', monospace; }
+
+        /* MAIN HUD LAYOUT */
+        #hud-wrapper {
+            display: none; width: 100vw; height: 100vh; padding: 2.5vw; box-sizing: border-box;
+            display: flex; justify-content: space-between; align-items: center; opacity: 0;
+            transition: opacity 1.2s ease-in;
+        }
+
+        .panel {
+            width: 26vw; height: 86vh; display: flex; flex-direction: column;
+            position: relative; padding: 22px; box-sizing: border-box;
+            background: var(--panel-bg); border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        .bracket-left { border-left: 3px solid var(--cyan); border-bottom: 3px solid var(--cyan); }
+        .bracket-right { border-top: 3px solid var(--cyan); border-right: 3px solid var(--cyan); }
+
+        .glitch-title {
+            font-family: 'Orbitron', sans-serif; font-size: 1.7rem; font-weight: 900;
+            color: var(--cyan); text-shadow: var(--text-glow); letter-spacing: 2px;
+            margin-bottom: 20px; position: relative;
+        }
+        .glitch-title::before, .glitch-title::after {
+            content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: transparent; opacity: 0.8;
+        }
+        .glitch-title::before { left: 2px; text-shadow: -2px 0 var(--red); clip-path: inset(10% 0 80% 0); animation: glitch 2s infinite linear alternate-reverse; }
+        .glitch-title::after { left: -2px; text-shadow: -2px 0 var(--blue); clip-path: inset(80% 0 10% 0); animation: glitch 3s infinite linear alternate-reverse; }
+
+        @keyframes glitch {
+            0% { clip-path: inset(20% 0 80% 0); transform: translate(-2px, 1px); }
+            50% { clip-path: inset(60% 0 10% 0); transform: translate(2px, -1px); }
+            100% { clip-path: inset(40% 0 50% 0); transform: translate(-2px, 1px); }
+        }
+
+        .stat-text { color: rgba(0, 243, 255, 0.7); margin: 8px 0; font-size: 1.05rem; }
+        .stat-value { color: var(--cyan); font-weight: bold; text-shadow: 0 0 8px var(--cyan); }
+        
+        .sys-log {
+            flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+            font-size: 0.95rem; margin-top: 10px; color: rgba(0, 243, 255, 0.65);
+        }
+        .sys-log::-webkit-scrollbar { width: 3px; }
+        .sys-log::-webkit-scrollbar-thumb { background: var(--cyan); }
+
+        .msg { padding: 8px 10px; border-left: 2px solid var(--cyan); margin-bottom: 8px; background: rgba(0, 243, 255, 0.04); }
+        .msg-user { border-left-color: #00ffaa; color: #00ffaa; }
+        .msg-jarvis { border-left-color: var(--cyan); color: var(--cyan); font-weight: bold; text-shadow: 0 0 5px rgba(0,243,255,0.5); }
+
+        /* CENTER REACTOR & 3D ANIMATED RINGS */
+        .center-reactor {
+            position: relative; width: 36vw; height: 36vw; max-width: 520px; max-height: 520px;
+            display: flex; justify-content: center; align-items: center; perspective: 1000px;
+        }
+        .ring { position: absolute; border-radius: 50%; transform-style: preserve-3d; }
+        .ring-1 { width: 100%; height: 100%; border: 2px dashed rgba(0, 243, 255, 0.5); animation: spinZ 22s linear infinite; }
+        .ring-2 { width: 84%; height: 84%; border: 2px dotted rgba(0, 119, 255, 0.8); animation: spinZ 14s linear infinite reverse; }
+        .ring-3 { width: 68%; height: 68%; border-top: 3px solid var(--cyan); border-bottom: 3px solid var(--cyan); animation: spinX 10s linear infinite; }
+        .ring-4 { width: 52%; height: 52%; border-left: 3px solid var(--red); border-right: 3px solid var(--red); animation: spinY 7s linear infinite; opacity: 0.5; transition: opacity 0.3s, border-color 0.3s; }
+
+        @keyframes spinZ { 100% { transform: rotateZ(360deg); } }
+        @keyframes spinX { 100% { transform: rotateX(360deg) rotateY(180deg); } }
+        @keyframes spinY { 100% { transform: rotateY(360deg) rotateZ(180deg); } }
+
+        .core-btn {
+            width: 125px; height: 125px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,119,255,0.25) 0%, transparent 70%);
+            border: 2px solid var(--cyan); z-index: 50; cursor: none;
+            display: flex; justify-content: center; align-items: center;
+            font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: bold;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.3); transition: all 0.3s; text-align: center;
+        }
+        .core-btn:hover { box-shadow: 0 0 60px var(--cyan); background: radial-gradient(circle, rgba(0,243,255,0.4) 0%, transparent 70%); }
+        .core-btn.listening { 
+            border-color: var(--red); box-shadow: 0 0 80px var(--red); color: var(--red);
+            text-shadow: 0 0 10px var(--red); animation: pulseListening 0.8s infinite alternate; 
+        }
+        .core-btn.listening ~ .ring-4 { opacity: 1; border-color: var(--red); box-shadow: 0 0 20px var(--red); }
+
+        @keyframes pulseListening { 0% { transform: scale(1); } 100% { transform: scale(1.1); box-shadow: 0 0 100px var(--red); } }
+
+        /* FOOTER SIGNATURES */
+        .signatures {
+            position: absolute; bottom: 12px; width: 100%; text-align: center;
+            font-size: 0.85rem; letter-spacing: 3px; color: rgba(0, 243, 255, 0.5); text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay"></div>
+    <div id="cursor-dot"></div>
+    <div id="cursor-ring"></div>
+
+    <!-- BOOT ANIMATION OVERLAY -->
+    <div id="boot-screen">
+        <div class="boot-line" id="b1">> INITIATING SYSTEM 1....</div>
+        <div class="boot-bar-container"><div class="boot-bar" id="boot-progress"></div></div>
+        <div class="boot-line" id="b2">> SYSTEM INITIALIZING...</div>
+        <div class="boot-line" id="b3">> ALLOCATING MEMORY...</div>
+        <div class="boot-line" id="b4">> FETCHING SYSTEM INFO...</div>
+        <div class="boot-line" id="b5">> TESTING COMPONENTS...</div>
+        <div class="boot-line" id="b6">> ESTABLISHING NEURAL LINK...</div>
+        <div class="boot-line" id="b7" style="color: var(--cyan); font-weight: bold; font-size: 2.1rem; margin-top:20px; text-shadow: 0 0 20px var(--cyan);">> JARVIS IS ONLINE.</div>
+    </div>
+
+    <!-- MAIN HUD DISPLAY -->
+    <div id="hud-wrapper">
+        <!-- LEFT DIAGNOSTICS PANEL -->
+        <div class="panel bracket-left">
+            <div class="glitch-title" data-text="DIAGNOSTICS">DIAGNOSTICS</div>
+            <div style="margin-bottom: 20px;">
+                <p class="stat-text">CPU LOAD: <span class="stat-value" id="cpu-stat">0%</span></p>
+                <p class="stat-text">RAM ALLOC: <span class="stat-value" id="ram-stat">0%</span></p>
+                <p class="stat-text">CORE: <span class="stat-value" id="status-stat">PROCESSING</span></p>
+            </div>
+            <div class="glitch-title" data-text="SYSTEM LOG" style="font-size: 1.3rem;">SYSTEM LOG</div>
+            <div class="sys-log" id="sys-terminal"></div>
+        </div>
+
+        <!-- CENTER REACTOR -->
+        <div class="center-reactor">
+            <div class="ring ring-1"></div>
+            <div class="ring ring-2"></div>
+            <div class="ring ring-3"></div>
+            <div class="ring ring-4"></div>
+            <div class="core-btn interactive" id="voice-btn" onmouseover="playHover()" onclick="toggleVoice()">MIC<br>OFF</div>
+        </div>
+
+        <!-- RIGHT COMMS UPLINK PANEL -->
+        <div class="panel bracket-right">
+            <div class="glitch-title" data-text="COMMS UPLINK">COMMS UPLINK</div>
+            <div class="sys-log" id="chat-terminal" style="color: var(--cyan);"></div>
+        </div>
+        
+        <div class="signatures">
+            THE SILENT EXPLOIT BASE PROJECT FOR LEARNING<br>
+            <span style="font-size: 0.65rem; opacity: 0.75;">SIGNATURE: AR-JATALA</span>
+        </div>
+    </div>
+
+    <script>
+        // CURSOR ANIMATION
+        const cursorDot = document.getElementById('cursor-dot');
+        const cursorRing = document.getElementById('cursor-ring');
+        document.addEventListener('mousemove', (e) => {
+            cursorDot.style.left = e.clientX + 'px'; cursorDot.style.top = e.clientY + 'px';
+            setTimeout(() => { cursorRing.style.left = e.clientX + 'px'; cursorRing.style.top = e.clientY + 'px'; }, 35);
+        });
+        document.querySelectorAll('.interactive').forEach(el => {
+            el.addEventListener('mouseenter', () => { cursorRing.style.width = '48px'; cursorRing.style.height = '48px'; cursorRing.style.borderColor = 'var(--red)'; });
+            el.addEventListener('mouseleave', () => { cursorRing.style.width = '32px'; cursorRing.style.height = '32px'; cursorRing.style.borderColor = 'var(--cyan)'; });
+        });
+
+        // WEB AUDIO API SYNTHESIZER
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, duration, vol=0.08) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        }
+        function playHover() { playTone(850, 'sine', 0.08, 0.04); }
+        function playClick() { playTone(1300, 'square', 0.12, 0.08); }
+        function typeBeep() { playTone(1600, 'sawtooth', 0.02, 0.02); }
+
+        // BOOT SEQUENCE ENGINE
+        const sysTerminal = document.getElementById('sys-terminal');
+        const chatTerminal = document.getElementById('chat-terminal');
+        const bootText = [
+            { id: 'b1', time: 400 }, { id: 'b2', time: 1300 }, { id: 'b3', time: 2000 },
+            { id: 'b4', time: 2700 }, { id: 'b5', time: 3400 }, { id: 'b6', time: 4100 },
+            { id: 'b7', time: 5200 }
+        ];
+
+        function logSys(text) {
+            const div = document.createElement('div'); div.innerText = text;
+            sysTerminal.appendChild(div); sysTerminal.scrollTop = sysTerminal.scrollHeight;
+        }
+        function logChat(sender, text) {
+            const div = document.createElement('div');
+            div.className = sender === 'JARVIS' ? 'msg msg-jarvis' : 'msg msg-user';
+            div.innerHTML = `[${sender}]> ${text}`;
+            chatTerminal.appendChild(div); chatTerminal.scrollTop = chatTerminal.scrollHeight;
+        }
+
+        window.onload = () => {
+            playTone(320, 'sawtooth', 0.8, 0.15);
+            const progressBar = document.getElementById('boot-progress');
+            let progress = 0;
+            const progInt = setInterval(() => { progress += 2; progressBar.style.width = `${progress}%`; if(progress >= 100) clearInterval(progInt); }, 45);
+
+            bootText.forEach(step => {
+                setTimeout(() => {
+                    const el = document.getElementById(step.id);
+                    if(el) { el.style.opacity = 1; typeBeep(); logSys(el.innerText); }
+                }, step.time);
+            });
+
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.display = 'none';
+                document.getElementById('hud-wrapper').style.display = 'flex';
+                setTimeout(() => { document.getElementById('hud-wrapper').style.opacity = 1; }, 50);
+            }, 6200);
+        };
+
+        // REAL-TIME DATA POLLING ENGINE
+        let lastId = 0;
+        let isVoiceActive = false;
+        const voiceBtn = document.getElementById('voice-btn');
+
+        async function toggleVoice() {
+            playClick();
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/toggle_mic', { method: 'POST' });
+                const data = await res.json();
+                isVoiceActive = data.mic_active;
+                
+                if (isVoiceActive) {
+                    voiceBtn.innerHTML = "MIC<br>ACTIVE";
+                    voiceBtn.classList.add('listening');
+                } else {
+                    voiceBtn.innerHTML = "MIC<br>OFF";
+                    voiceBtn.classList.remove('listening');
+                }
+            } catch (err) { logSys("> ERR: UPLINK FAILED."); }
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch(`http://127.0.0.1:5000/api/poll?since=${lastId}`);
+                const data = await res.json();
+                document.getElementById('status-stat').innerText = data.status.toUpperCase();
+                
+                data.items.forEach(item => {
+                    if (item.user) logChat('USER', item.user);
+                    if (item.jarvis) logChat('JARVIS', item.jarvis);
+                    lastId = Math.max(lastId, item.id);
+                });
+
+                const sysRes = await fetch('http://127.0.0.1:5000/api/sysinfo');
+                const sysData = await sysRes.json();
+                document.getElementById('cpu-stat').innerText = `${sysData.cpu}%`;
+                document.getElementById('ram-stat').innerText = `${sysData.ram}%`;
+            } catch (err) {}
+        }
+        setInterval(poll, 1000);
+    </script>
+</body>
+</html>
